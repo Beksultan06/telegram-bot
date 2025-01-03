@@ -1,0 +1,96 @@
+services:
+  backend:
+    build: .
+    command: sh -c "python manage.py makemigrations && python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py reorder business.tariff business.Service business.ServiceCategory business.ServiceSubCategory car.CarCategory car.CarBrand car.CarModel car.PartCategory car.Part car.PartManufacturerCountry car.CarBody info.Region info.PromotionalCodesAndDiscount info.FAQ info.Ad && gunicorn src.wsgi:application --bind 0.0.0.0:8000 --access-logfile '-'"
+    restart: always
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./main/firebase_creds:/main/firebase_creds
+      - ./main/media:/main/media
+      - ./main/static:/main/static
+    env_file:
+      - .env
+
+    depends_on:
+      - database
+      - redis
+
+  celery_worker:
+    build: .
+    command: sh -c "celery -A src worker -l info -B"
+    restart: always
+    container_name: celery_worker
+    volumes:
+      - ./main/firebase_creds:/main/firebase_creds
+    env_file:
+      - .env
+
+    depends_on:
+      - database
+      - redis
+      - backend
+
+  celery_beat:
+    build: .
+    command: sh -c "celery -A src beat -l info"
+    restart: always
+    container_name: celery_beat
+    volumes:
+      - ./main/firebase_creds:/main/firebase_creds
+    env_file:
+      - .env
+
+    depends_on:
+      - database
+      - redis
+      - backend
+
+  database:
+    container_name: database
+    image: postgres:14.6-alpine
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: "redis:7.2.3-alpine3.18"
+    container_name: "redis"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  nginx:
+    container_name: "nginx"
+    build: ./nginx
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      - backend
+    volumes:
+      - ./main/media:/media
+      - ./main/static:/static
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    restart: "always"
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:
+  certbot_conf:
+  certbot_www:
