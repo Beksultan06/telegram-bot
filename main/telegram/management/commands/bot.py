@@ -60,17 +60,37 @@ async def handle_model(callback_query: types.CallbackQuery, state: FSMContext):
         await callback_query.message.edit_text("Ошибка: Модель не найдена.")
 
 @router.message(CarForm.waiting_for_photos, lambda message: message.photo)
-async def get_photos(message: types.Message, state: FSMContext):
+async def get_photo(message: types.Message, state: FSMContext):
+    # Получаем текущие данные состояния
     data = await state.get_data()
     photos = data.get("photos", [])
+
+    # Добавляем новое фото в список
     photos.append(message.photo[-1].file_id)
     await state.update_data(photos=photos)
-    await message.answer("Фото добавлено. Отправьте ещё одно или завершите командой /done.")
 
-@router.message(Command("done"), CarForm.waiting_for_photos)
-async def finish_photos(message: types.Message, state: FSMContext):
-    await message.answer("Теперь отправьте описание автомобиля.")
+    # Проверяем, было ли уже отправлено сообщение
+    if len(photos) == 1:  # Сообщение отправляется только при добавлении первого фото
+        await message.answer("Фото добавлено. Отправьте ещё одно или завершите командой /done.")
+
+    # Не нужно повторно обновлять флаг photo_added, так как мы проверяем количество фото
+
+
+@router.message(Command("done"))
+async def finish_photo_upload(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    photos = data.get("photos", [])
+
+    if not photos:
+        await message.answer("Вы не добавили ни одного фото.")
+    else:
+        await message.answer(f"Вы добавили {len(photos)} фото. Продолжим заполнение.")
+
+    # Сбрасываем флаг и переходим к следующему шагу
+    await state.update_data(photo_added=False)
     await state.set_state(CarForm.waiting_for_description)
+
+
 
 @router.message(CarForm.waiting_for_description)
 async def get_description(message: types.Message, state: FSMContext):
