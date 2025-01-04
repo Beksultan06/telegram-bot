@@ -3,14 +3,10 @@ from product.models import Product
 from asgiref.sync import sync_to_async
 from aiogram import types
 
-# Инлайн-кнопки для выбора типа пользователя
-inline_type_users = InlineKeyboardMarkup(inline_keyboard=[ 
-    [InlineKeyboardButton(text="Бизнес", callback_data="bussines")], 
-    [InlineKeyboardButton(text='Клиент', callback_data='cklient')] 
+inline_type_users = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Бизнес", callback_data="bussines")],
+    [InlineKeyboardButton(text='Клиент', callback_data='cklient')]
 ])
-
-
-# Sync to async functions for database queries
 
 @sync_to_async
 def get_product_by_model_async(model_id):
@@ -28,13 +24,10 @@ def get_car_models():
 def get_car_brands():
     return list(Product.objects.values('car_brand', 'car_brand__title').distinct())
 
-# Generate inline keyboard buttons
 async def generate_car_buttons(choice_type="model"):
     keyboard = types.InlineKeyboardMarkup(row_width=1, inline_keyboard=[])
-
     if choice_type == "model":
         car_models = await get_car_models()
-
         if car_models:
             for product in car_models:
                 model_name = product.get('car_model__title', 'Unknown Model')
@@ -46,7 +39,6 @@ async def generate_car_buttons(choice_type="model"):
                     print(f"Model ID not found for product: {product}")
         else:
             keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="Нет категорий моделей", callback_data="no_models")])
-
     elif choice_type == "brand":
         car_brands = await get_car_brands()
 
