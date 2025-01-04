@@ -2,56 +2,68 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from product.models import Product
 from asgiref.sync import sync_to_async
 from aiogram import types
+from car.models import CarBrand, CarModel  # Импорт моделей
 
 inline_type_users = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="Бизнес", callback_data="bussines")],
     [InlineKeyboardButton(text='Клиент', callback_data='cklient')]
 ])
 
-@sync_to_async
-def get_product_by_model_async(model_id):
-    return list(Product.objects.filter(car_model_id=model_id))
 
 @sync_to_async
-def get_product_by_brand_async(brand_id):
-    return Product.objects.filter(car_brand_id=brand_id).first()
+def get_car_brand_title(brand_id):
+    """Получить название марки по ID."""
+    brand = CarBrand.objects.filter(id=brand_id).first()
+    return brand.title if brand else "Unknown Brand"
 
 @sync_to_async
-def get_car_models():
-    return list(Product.objects.values('car_model', 'car_model__title').distinct())
+def get_car_model_title(model_id):
+    """Получить название модели по ID."""
+    model = CarModel.objects.filter(id=model_id).first()
+    return model.title if model else "Unknown Model"
 
 @sync_to_async
-def get_car_brands():
-    return list(Product.objects.values('car_brand', 'car_brand__title').distinct())
+def get_car_models_by_brand(brand_id):
+    """Получить модели по ID марки."""
+    return list(CarModel.objects.filter(brand_id=brand_id).values('id', 'title'))
 
-async def generate_car_buttons(choice_type="model"):
-    keyboard = types.InlineKeyboardMarkup(row_width=1, inline_keyboard=[])
-    if choice_type == "model":
-        car_models = await get_car_models()
-        if car_models:
-            for product in car_models:
-                model_name = product.get('car_model__title', 'Unknown Model')
-                model_id = product.get('car_model', None)
+@sync_to_async
+def get_all_car_brands():
+    """Получить все марки машин."""
+    return list(CarBrand.objects.values('id', 'title'))
 
-                if model_id:
-                    keyboard.inline_keyboard.append([types.InlineKeyboardButton(text=model_name, callback_data=f"model_{model_id}")])
-                else:
-                    print(f"Model ID not found for product: {product}")
-        else:
-            keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="Нет категорий моделей", callback_data="no_models")])
-    elif choice_type == "brand":
-        car_brands = await get_car_brands()
+async def generate_car_buttons(choice_type="brand", brand_id=None):
+    """
+    Генерация кнопок для выбора марок или моделей.
+    :param choice_type: Тип данных — 'brand' или 'model'.
+    :param brand_id: ID марки (для фильтрации моделей).
+    """
+    keyboard = InlineKeyboardMarkup(row_width=1, inline_keyboard=[])
 
+    if choice_type == "brand":
+        # Получаем все марки
+        car_brands = await get_all_car_brands()
         if car_brands:
-            for product in car_brands:
-                brand_name = product.get('car_brand__title', 'Unknown Brand')
-                brand_id = product.get('car_brand', None)
-
-                if brand_id:
-                    keyboard.inline_keyboard.append([types.InlineKeyboardButton(text=brand_name, callback_data=f"brand_{brand_id}")])
-                else:
-                    print(f"Brand ID not found for product: {product}")
+            for brand in car_brands:
+                keyboard.inline_keyboard.append(
+                    [InlineKeyboardButton(text=brand['title'], callback_data=f"brand_{brand['id']}")]
+                )
         else:
-            keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="Нет категорий марок", callback_data="no_brands")])
+            keyboard.inline_keyboard.append(
+                [InlineKeyboardButton(text="Нет доступных марок", callback_data="no_brands")]
+            )
+
+    elif choice_type == "model" and brand_id:
+        # Получаем модели для выбранной марки
+        car_models = await get_car_models_by_brand(brand_id)
+        if car_models:
+            for model in car_models:
+                keyboard.inline_keyboard.append(
+                    [InlineKeyboardButton(text=model['title'], callback_data=f"model_{model['id']}")]
+                )
+        else:
+            keyboard.inline_keyboard.append(
+                [InlineKeyboardButton(text="Нет доступных моделей", callback_data="no_models")]
+            )
 
     return keyboard
