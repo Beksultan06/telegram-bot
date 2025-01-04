@@ -1,8 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from product.models import Product
 from asgiref.sync import sync_to_async
-from aiogram import types
-from car.models import CarBrand, CarModel  # Импорт моделей
+from car.models import CarBrand, CarModel
 
 inline_type_users = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="Бизнес", callback_data="bussines")],

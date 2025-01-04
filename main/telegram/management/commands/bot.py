@@ -1,7 +1,7 @@
 from aiogram import types, Router
 from aiogram.filters import Command
 from telegram.management.commands.app.button import generate_car_buttons, get_car_brand_title, get_car_model_title, \
-    get_car_models_by_brand, inline_type_users
+get_car_models_by_brand, inline_type_users
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InputMediaPhoto
@@ -61,20 +61,13 @@ async def handle_model(callback_query: types.CallbackQuery, state: FSMContext):
 
 @router.message(CarForm.waiting_for_photos, lambda message: message.photo)
 async def get_photo(message: types.Message, state: FSMContext):
-    # Получаем текущие данные состояния
     data = await state.get_data()
     photos = data.get("photos", [])
-
-    # Добавляем новое фото в список
     photos.append(message.photo[-1].file_id)
     await state.update_data(photos=photos)
 
-    # Проверяем, было ли уже отправлено сообщение
-    if len(photos) == 1:  # Сообщение отправляется только при добавлении первого фото
+    if len(photos) == 1:
         await message.answer("Фото добавлено. Отправьте ещё одно или завершите командой /done.")
-
-    # Не нужно повторно обновлять флаг photo_added, так как мы проверяем количество фото
-
 
 @router.message(Command("done"))
 async def finish_photo_upload(message: types.Message, state: FSMContext):
@@ -85,12 +78,8 @@ async def finish_photo_upload(message: types.Message, state: FSMContext):
         await message.answer("Вы не добавили ни одного фото.")
     else:
         await message.answer(f"Вы добавили {len(photos)} фото. Продолжим заполнение.")
-
-    # Сбрасываем флаг и переходим к следующему шагу
     await state.update_data(photo_added=False)
     await state.set_state(CarForm.waiting_for_description)
-
-
 
 @router.message(CarForm.waiting_for_description)
 async def get_description(message: types.Message, state: FSMContext):
