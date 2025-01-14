@@ -20,18 +20,19 @@ def get_car_models_by_brand(brand_id):
     return list(CarModel.objects.filter(brand_id=brand_id).values('id', 'title'))
 
 @sync_to_async
-def get_products_by_model(model_id):
-    # Получаем основное изображение каждого продукта
-    main_image_subquery = ProductImage.objects.filter(
-        product=OuterRef('pk'), is_main=True
-    ).values('image')[:1]
-
-    # Формируем данные о продуктах с их основным изображением
-    return list(Product.objects.filter(car_model_id=model_id).annotate(
-        main_image=Subquery(main_image_subquery)
-    ).values(
-        'title', 'description', 'price', 'car_brand__title', 'car_model__title', 'main_image'
-    ))
+def get_products_and_images_by_model(model_id):
+    # Получаем товары с основными и дополнительными изображениями
+    products = Product.objects.filter(car_model_id=model_id).values(
+        'id', 'title', 'description', 'price', 'car_brand__title', 'car_model__title'
+    )
+    
+    # Для каждого товара получаем связанные изображения
+    result = []
+    for product in products:
+        images = list(ProductImage.objects.filter(product_id=product['id']).values_list('image', flat=True))
+        result.append({**product, 'images': images})
+    
+    return result
 
 @router.message(Command(commands=["start"]))
 async def start(message: types.Message):
@@ -65,14 +66,12 @@ async def select_brand(callback_query: types.CallbackQuery):
 async def select_model(callback_query: types.CallbackQuery):
     model_id = int(callback_query.data.split("_")[1])
     try:
-        products = await get_products_by_model(model_id)
+        products = await get_products_and_images_by_model(model_id)
         print(f"Полученные товары для модели {model_id}: {products}")
 
         if products:
             for product in products:
-                image_path = os.path.join(settings.MEDIA_ROOT, product['main_image'])
-                print(f"Путь к изображению: {image_path}")
-
+                # Формируем текст описания товара
                 message_text = (
                     f"Бренд: {product['car_brand__title']}\n"
                     f"Модель: {product['car_model__title']}\n"
@@ -81,16 +80,40 @@ async def select_model(callback_query: types.CallbackQuery):
                     f"Цена: {product['price']} руб.\n"
                 )
                 print(f"Текст сообщения: {message_text}")
-
-                try:
-                    if os.path.exists(image_path):
-                        photo = FSInputFile(image_path)
-                        await callback_query.message.answer_photo(photo=photo, caption=message_text)
+                
+                # Проверяем изображения
+                if product['images']:
+                    main_image_path = os.path.join(settings.MEDIA_ROOT, product['images'][0])
+                    print(f"Путь к основному изображению: {main_image_path}")
+                    
+                    # Отправляем основное изображение с описанием
+                    if os.path.exists(main_image_path):
+                        try:
+                            main_photo = FSInputFile(main_image_path)
+                            await callback_query.message.answer_photo(photo=main_photo, caption=message_text)
+                        except Exception as e:
+                            print(f"Ошибка при отправке основного изображения: {e}")
+                            await callback_query.message.answer(message_text)
                     else:
-                        print(f"Файл не найден: {image_path}")
+                        print(f"Основное изображение не найдено: {main_image_path}")
                         await callback_query.message.answer(message_text)
-                except Exception as e:
-                    print(f"Ошибка при отправке сообщения: {e}")
+
+                    # Отправляем остальные изображения отдельно
+                    for image_path in product['images'][1:]:
+                        additional_image_path = os.path.join(settings.MEDIA_ROOT, image_path)
+                        print(f"Путь к дополнительному изображению: {additional_image_path}")
+                        
+                        if os.path.exists(additional_image_path):
+                            try:
+                                additional_photo = FSInputFile(additional_image_path)
+                                await callback_query.message.answer_photo(photo=additional_photo)
+                            except Exception as e:
+                                print(f"Ошибка при отправке дополнительного изображения: {e}")
+                                continue
+                        else:
+                            print(f"Дополнительное изображение не найдено: {additional_image_path}")
+                else:
+                    # Если изображения отсутствуют, отправляем только текст
                     await callback_query.message.answer(message_text)
         else:
             await callback_query.message.answer("К сожалению, нет доступных товаров для этой модели.")
